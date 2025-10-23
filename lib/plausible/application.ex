@@ -180,6 +180,12 @@ defmodule Plausible.Application do
         Supervisor.child_spec(Plausible.Session.WriteBuffer, id: Plausible.Session.WriteBuffer),
         ReferrerBlocklist,
         {Plausible.RateLimit, clean_period: :timer.minutes(10)},
+        Plausible.Ingestion.Persistor.TCPClientPool.child_spec(
+          name: Plausible.Ingestion.Persistor.TCPClientPool,
+          pool_size: 100,
+          host: "localhost",
+          port: 8101
+        ),
         {Finch, name: Plausible.Finch, pools: finch_pool_config()},
         {Phoenix.PubSub, name: Plausible.PubSub},
         endpoint,

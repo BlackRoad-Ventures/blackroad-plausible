@@ -277,8 +277,8 @@ defmodule Plausible.PromEx.Plugins.PlausibleMetrics do
         measurement: :duration
       ),
       distribution(
-        metric_prefix ++ [:persistor, :remote, :decode, :duration, :millisecond],
-        event_name: Persistor.Remote.telemetry_decode_duration(),
+        metric_prefix ++ [:persistor, :remote, :tcp_request, :duration, :millisecond],
+        event_name: [:persistor, :tcp_request, :stop],
         reporter_options: [
           buckets: [1, 10, 25, 50, 75, 100, 250, 350, 500, 750, 1_000, 5_000, 10_000, 30_000]
         ],

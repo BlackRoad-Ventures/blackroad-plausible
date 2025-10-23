@@ -146,6 +146,7 @@ persistor_backend =
     "embedded" -> Plausible.Ingestion.Persistor.Embedded
     "embedded_with_relay" -> Plausible.Ingestion.Persistor.EmbeddedWithRelay
     "remote" -> Plausible.Ingestion.Persistor.Remote
+    "remote_over_tcp" -> Plausible.Ingestion.Persistor.RemoteOverTCP
   end
 
 {persistor_backend_percent_enabled, ""} =
@@ -159,6 +160,9 @@ persistor_url =
 persistor_count = get_int_from_path_or_env(config_dir, "PERSISTOR_COUNT", 200)
 
 persistor_timeout_ms = get_int_from_path_or_env(config_dir, "PERSISTOR_TIMEOUT_MS", 10_000)
+
+persistor_host = get_var_from_path_or_env(config_dir, "PERSISTOR_HOST", "localhost")
+persistor_port = get_int_from_path_or_env(config_dir, "PERSISTOR_PORT", 8101)
 
 # Can be generated  with `Base.encode64(:crypto.strong_rand_bytes(32))` from
 # iex shell or `openssl rand -base64 32` from command line.
@@ -673,6 +677,10 @@ config :plausible, Plausible.Ingestion.Persistor.Remote,
   url: persistor_url,
   count: persistor_count,
   timeout_ms: persistor_timeout_ms
+
+config :plausible, Plausible.Ingestion.Persistor.TCPClient,
+  host: persistor_host,
+  port: persistor_port
 
 config :ex_money,
   open_exchange_rates_app_id: get_var_from_path_or_env(config_dir, "OPEN_EXCHANGE_RATES_APP_ID"),
