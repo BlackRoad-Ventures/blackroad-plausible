@@ -198,7 +198,7 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
       end
 
       test "can create a consolidated view for team", %{conn: conn, user: user} do
-        team = team_of(user)
+        team = user |> team_of() |> Plausible.Teams.complete_setup()
 
         {:ok, lv, _html} = live(conn, open_team(team.id, tab: "consolidated_views"))
 
@@ -209,7 +209,7 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
 
       test "renders existing consolidated view", %{conn: conn, user: user} do
         team = team_of(user)
-        Plausible.ConsolidatedView.enable(team)
+        new_consolidated_view(team)
 
         {:ok, lv, _html} = live(conn, open_team(team.id, tab: "consolidated_views"))
         html = render(lv)
@@ -224,7 +224,7 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
 
       test "can delete consolidated view", %{conn: conn, user: user} do
         team = team_of(user)
-        Plausible.ConsolidatedView.enable(team)
+        new_consolidated_view(team)
 
         {:ok, lv, _html} = live(conn, open_team(team.id, tab: "consolidated_views"))
 
@@ -421,7 +421,7 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
 
         assert text_of_element(
                  html,
-                 ~s|select[name="enterprise_plan[billing_interval]"] option[selected="selected"]|
+                 ~s|select[name="enterprise_plan[billing_interval]"] option[selected]|
                ) ==
                  "monthly"
 
@@ -444,17 +444,17 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
 
         assert element_exists?(
                  html,
-                 ~s|input[name="enterprise_plan[features[]][stats_api]"][checked="checked"]|
+                 ~s|input[name="enterprise_plan[features[]][stats_api]"][checked]|
                )
 
         assert element_exists?(
                  html,
-                 ~s|input[name="enterprise_plan[features[]][funnels]"][checked="checked"]|
+                 ~s|input[name="enterprise_plan[features[]][funnels]"][checked]|
                )
 
         refute element_exists?(
                  html,
-                 ~s|input[name="enterprise_plan[features[]][revenue_goals]"][checked="checked"]|
+                 ~s|input[name="enterprise_plan[features[]][revenue_goals]"][checked]|
                )
 
         assert text(html) =~ "Update Plan"
@@ -647,6 +647,76 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
                ) == "5000000"
       end
 
+      test "current plan is annotated and delete button is available", %{conn: conn, user: user} do
+        team = team_of(user)
+
+        user
+        |> subscribe_to_enterprise_plan(
+          team_member_limit: :unlimited,
+          paddle_plan_id: "plan-current"
+        )
+
+        insert(:enterprise_plan,
+          team: team,
+          paddle_plan_id: "plan-another",
+          monthly_pageview_limit: 1_000_000
+        )
+
+        {:ok, lv, _html} = live(conn, open_team(team.id, tab: :billing))
+
+        html = render(lv)
+
+        current_selector = ~s|[data-test-id="plan-entry-plan-current"]|
+        other_selector = ~s|[data-test-id="plan-entry-plan-another"]|
+
+        assert element_exists?(html, current_selector)
+        assert element_exists?(html, other_selector)
+
+        current = text_of_element(html, current_selector)
+        other = text_of_element(html, other_selector)
+
+        assert current =~ "CURRENT"
+        refute other =~ "CURRENT"
+
+        refute element_exists?(
+                 html,
+                 ~s|button[phx-click="delete-plan"][data-test-id="delete-plan-plan-current"]|
+               )
+
+        assert element_exists?(
+                 html,
+                 ~s|button[phx-click="delete-plan"][data-test-id="delete-plan-plan-another"]|
+               )
+      end
+
+      test "plan can be deleted", %{conn: conn, user: user} do
+        team = team_of(user)
+
+        user |> subscribe_to_enterprise_plan(team_member_limit: :unlimited)
+
+        inactive_plan =
+          insert(:enterprise_plan,
+            team: team,
+            paddle_plan_id: "plan-another",
+            monthly_pageview_limit: 1_000_000
+          )
+
+        {:ok, lv, _html} = live(conn, open_team(team.id, tab: :billing))
+
+        html = render(lv)
+
+        assert element_exists?(html, ~s|[data-test-id="plan-entry-plan-another"]|)
+
+        lv
+        |> element(~s|button[phx-click="delete-plan"][data-test-id="delete-plan-plan-another"]|)
+        |> render_click()
+
+        html = render(lv)
+
+        refute Plausible.Repo.get(Plausible.Billing.EnterprisePlan, inactive_plan.id)
+        refute element_exists?(html, ~s|[data-test-id="plan-entry-plan-another"]|)
+      end
+
       defp open_custom_plan(conn, team) do
         {:ok, lv, _html} = live(conn, open_team(team.id, tab: :billing))
         render(lv)
@@ -788,8 +858,7 @@ defmodule PlausibleWeb.Live.CustomerSupport.TeamsTest do
           |> element(~s|button[phx-click="reveal-audit-entry"][phx-value-id="#{entry.id}"]|)
           |> render_click()
 
-        assert text_of_element(html, ~s|textarea|) ==
-                 "{ &amp;quot;foo&amp;quot;: &amp;quot;bar&amp;quot; }"
+        assert text_of_element(html, ~s|textarea|) == ~s|{ "foo": "bar" }|
       end
 
       test "shows audit entries when user id does not exists", %{conn: conn, user: user} do

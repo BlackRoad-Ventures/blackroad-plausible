@@ -10,12 +10,15 @@ defmodule Plausible.InstallationSupport.Detection.Checks do
 
   require Logger
 
-  @checks [
-    Checks.Url,
-    Checks.Detection
-  ]
+  @detection_check_timeout 6000
 
   def run(url, data_domain, opts \\ []) do
+    detection_check_timeout =
+      case Keyword.get(opts, :detection_check_timeout) do
+        int when is_integer(int) -> int
+        _ -> @detection_check_timeout
+      end
+
     report_to = Keyword.get(opts, :report_to, self())
     async? = Keyword.get(opts, :async?, true)
     slowdown = Keyword.get(opts, :slowdown, 500)
@@ -30,18 +33,61 @@ defmodule Plausible.InstallationSupport.Detection.Checks do
         assigns: %{detect_v1?: detect_v1?}
       }
 
-    CheckRunner.run(init_state, @checks,
+    checks = [
+      {Checks.Url, []},
+      {Checks.Detection, [timeout: detection_check_timeout]}
+    ]
+
+    CheckRunner.run(init_state, checks,
       async?: async?,
       report_to: report_to,
       slowdown: slowdown
     )
   end
 
-  def interpret_diagnostics(%State{} = state) do
-    Detection.Diagnostics.interpret(
-      state.diagnostics,
-      state.url
-    )
+  def telemetry_event_success(), do: [:plausible, :detection, :success]
+  def telemetry_event_failure(), do: [:plausible, :detection, :failure]
+
+  def interpret_diagnostics(%State{
+        diagnostics: diagnostics,
+        data_domain: data_domain,
+        url: url
+      }) do
+    result = Detection.Diagnostics.interpret(diagnostics, url)
+
+    {failed?, trigger_sentry?, msg} =
+      case result do
+        %{ok?: true} ->
+          {false, false, nil}
+
+        %{data: %{failure: :customer_website_issue}} ->
+          {true, false, "Failed due to an issue with the customer website"}
+
+        %{data: %{failure: :browserless_issue}} ->
+          {true, true, "Failed due to a Browserless issue"}
+
+        _unknown_failure ->
+          {true, true, "Unknown failure"}
+      end
+
+    if failed? do
+      :telemetry.execute(telemetry_event_failure(), %{})
+      Logger.warning("[DETECTION] #{msg} (data_domain='#{data_domain}'): #{inspect(diagnostics)}")
+    else
+      :telemetry.execute(telemetry_event_success(), %{})
+    end
+
+    if trigger_sentry? do
+      Sentry.capture_message("[DETECTION] #{msg}",
+        extra: %{
+          message: inspect(diagnostics),
+          url: url,
+          hash: :erlang.phash2(diagnostics)
+        }
+      )
+    end
+
+    result
   end
 
   @unthrottled_checks 3

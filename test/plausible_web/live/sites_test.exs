@@ -73,29 +73,25 @@ defmodule PlausibleWeb.Live.SitesTest do
       assert text_of_element(html, "#invitation-#{invitation2.invitation_id}") =~
                "G.I. Jane has invited you to join the \"My Personal Sites\" as editor member."
 
-      assert [_] =
-               find(
-                 html,
-                 ~s|#invitation-#{invitation1.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :accept_invitation, invitation1.invitation_id)}"]|
-               )
+      assert element_exists?(
+               html,
+               ~s|#invitation-#{invitation1.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :accept_invitation, invitation1.invitation_id)}"]|
+             )
 
-      assert [_] =
-               find(
-                 html,
-                 ~s|#invitation-#{invitation1.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :reject_invitation, invitation1.invitation_id)}"]|
-               )
+      assert element_exists?(
+               html,
+               ~s|#invitation-#{invitation1.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :reject_invitation, invitation1.invitation_id)}"]|
+             )
 
-      assert [_] =
-               find(
-                 html,
-                 ~s|#invitation-#{invitation2.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :accept_invitation, invitation2.invitation_id)}"]|
-               )
+      assert element_exists?(
+               html,
+               ~s|#invitation-#{invitation2.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :accept_invitation, invitation2.invitation_id)}"]|
+             )
 
-      assert [_] =
-               find(
-                 html,
-                 ~s|#invitation-#{invitation2.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :reject_invitation, invitation2.invitation_id)}"]|
-               )
+      assert element_exists?(
+               html,
+               ~s|#invitation-#{invitation2.invitation_id} a[href="#{Routes.invitation_path(PlausibleWeb.Endpoint, :reject_invitation, invitation2.invitation_id)}"]|
+             )
     end
 
     test "renders metadata for invitation", %{
@@ -301,6 +297,83 @@ defmodule PlausibleWeb.Live.SitesTest do
     end
   end
 
+  on_ee do
+    describe "consolidated views appearance" do
+      setup %{user: user} do
+        # this is temporary, instead of feature flag we'll only show consolidated views to super admins
+        patch_env(:super_admin_user_ids, [user.id])
+      end
+
+      test "consolidated view shows up", %{conn: conn, user: user} do
+        new_site(owner: user)
+        team = team_of(user)
+
+        conn = set_current_team(conn, team)
+
+        {:ok, _lv, html} = live(conn, "/sites")
+
+        refute element_exists?(html, ~s|[data-test-id="consolidated-view-card"]|)
+
+        new_consolidated_view(team)
+
+        {:ok, _lv, html} = live(conn, "/sites")
+
+        assert element_exists?(html, ~s|[data-test-id="consolidated-view-card"]|)
+        assert element_exists?(html, ~s|[data-test-id="consolidated-view-stats-loaded"]|)
+        assert element_exists?(html, ~s|[data-test-id="consolidated-view-chart-loaded"]|)
+      end
+
+      test "consolidated view presents consolidated stats", %{conn: conn, user: user} do
+        site1 = new_site(owner: user)
+        site2 = new_site(owner: user)
+
+        populate_stats(site1, [
+          build(:pageview, user_id: 1),
+          build(:pageview, user_id: 1),
+          build(:pageview)
+        ])
+
+        populate_stats(site2, [
+          build(:pageview, user_id: 3)
+        ])
+
+        team = team_of(user)
+
+        conn = set_current_team(conn, team)
+
+        new_consolidated_view(team)
+
+        {:ok, _lv, html} = live(conn, "/sites")
+
+        stats = text_of_element(html, ~s|[data-test-id="consolidated-view-stats-loaded"]|)
+        assert stats =~ "Unique visitors 3"
+        assert stats =~ "Total visits 3"
+        assert stats =~ "Total pageviews 4"
+        assert stats =~ "Views per visit 1.33"
+      end
+
+      test "consolidated view does not show up for non-superadmin (temp)", %{conn: conn} do
+        user = new_user()
+        new_site(owner: user)
+        team = team_of(user)
+
+        conn = set_current_team(conn, team)
+
+        {:ok, _lv, html} = live(conn, "/sites")
+
+        refute element_exists?(html, ~s|[data-test-id="consolidated-view-card"]|)
+
+        new_consolidated_view(team)
+
+        {:ok, _lv, html} = live(conn, "/sites")
+
+        refute element_exists?(html, ~s|[data-test-id="consolidated-view-card"]|)
+        refute element_exists?(html, ~s|[data-test-id="consolidated-view-stats-loaded"]|)
+        refute element_exists?(html, ~s|[data-test-id="consolidated-view-chart-loaded"]|)
+      end
+    end
+  end
+
   describe "pinning" do
     test "renders pin site option when site not pinned", %{conn: conn, user: user} do
       site = new_site(owner: user)
@@ -356,7 +429,8 @@ defmodule PlausibleWeb.Live.SitesTest do
         |> element(button_selector)
         |> render_click()
 
-      assert text(html) =~ "Looks like you've hit the pinned sites limit!"
+      assert html =~
+               LazyHTML.html_escape("Looks like you've hit the pinned sites limit!")
     end
 
     test "does not allow pinning site user doesn't have access to", %{conn: conn, user: user} do

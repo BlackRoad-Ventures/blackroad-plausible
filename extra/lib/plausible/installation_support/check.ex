@@ -24,15 +24,37 @@ defmodule Plausible.InstallationSupport.Check do
 
       @behaviour Plausible.InstallationSupport.Check
 
-      def perform_safe(state) do
-        perform(state)
-      catch
-        _, e ->
-          Logger.error(
-            "Error running check #{inspect(__MODULE__)} on #{state.url}: #{inspect(e)}"
-          )
+      def perform_safe(state, opts) do
+        timeout = Keyword.get(opts, :timeout, 10_000)
 
-          put_diagnostics(state, service_error: e)
+        task =
+          Task.async(fn ->
+            try do
+              perform(state)
+            catch
+              _, e ->
+                Logger.error(
+                  "Error running check #{inspect(__MODULE__)} on #{state.url}: #{inspect(e)}"
+                )
+
+                put_diagnostics(state, service_error: %{code: :internal_check_error, extra: e})
+            end
+          end)
+
+        try do
+          Task.await(task, timeout)
+        catch
+          :exit, {:timeout, _} ->
+            Task.shutdown(task, :brutal_kill)
+            check_name = __MODULE__ |> Atom.to_string() |> String.split(".") |> List.last()
+
+            put_diagnostics(state,
+              service_error: %{
+                code: :internal_check_timeout,
+                extra: "#{check_name} timed out after #{timeout}ms"
+              }
+            )
+        end
       end
     end
   end

@@ -16,10 +16,10 @@ defmodule PlausibleWeb.Live.GoalSettings.FormTest do
       assert element_exists?(html, ~s/a#event-tab/)
 
       pageview_tab = lv |> element(~s/a#pageview-tab/) |> render_click()
-      assert pageview_tab =~ "Page Path"
+      assert pageview_tab =~ "Page path"
 
       event_tab = lv |> element(~s/a#event-tab/) |> render_click()
-      assert event_tab =~ "Event Name"
+      assert event_tab =~ "Event name"
     end
 
     test "can navigate to scroll tab if scroll_depth feature visible for site/user",
@@ -248,7 +248,7 @@ defmodule PlausibleWeb.Live.GoalSettings.FormTest do
       lv |> element(~s/button#edit-goal-#{g.id}/) |> render_click()
 
       html = render(lv)
-      assert element_exists?(html, ~s|#page_path_input_modalseq0[value="/go/to/blog/**"|)
+      assert element_exists?(html, ~s|#page_path_input_modalseq0[value="/go/to/blog/**"]|)
 
       lv
       |> element("#goals-form-modalseq0 form")
@@ -269,7 +269,7 @@ defmodule PlausibleWeb.Live.GoalSettings.FormTest do
       lv |> element(~s/button#edit-goal-#{g.id}/) |> render_click()
 
       html = render(lv)
-      assert element_exists?(html, ~s|#page_path_input_modalseq0[value="/go/to/blog/**"|)
+      assert element_exists?(html, ~s|#page_path_input_modalseq0[value="/go/to/blog/**"]|)
 
       lv
       |> element("#goals-form-modalseq0 form")

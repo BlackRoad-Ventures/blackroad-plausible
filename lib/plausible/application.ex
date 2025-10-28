@@ -196,6 +196,7 @@ defmodule Plausible.Application do
     setup_request_logging()
     setup_sentry()
     setup_opentelemetry()
+    Plausible.Ingestion.Persistor.TelemetryHandler.install()
 
     setup_geolocation()
     Location.load_all()
@@ -281,9 +282,9 @@ defmodule Plausible.Application do
         persistor_url,
         Config.Reader.merge(
           default,
-          protocol: :http2,
+          protocols: [:http2],
           count: count,
-          conn_opts: [transport_opts: [timeout: timeout_ms]]
+          conn_opts: [transport_opts: [timeout: timeout_ms, nodelay: false]]
         )
       )
     else

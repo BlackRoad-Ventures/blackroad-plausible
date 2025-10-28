@@ -483,30 +483,21 @@ defmodule PlausibleWeb.SiteControllerTest do
     end
   end
 
-  describe "GET /:domain/installation" do
-    setup [:create_user, :log_in, :create_site]
-
-    test "static render - spinner determining installation type", %{
-      conn: conn,
-      site: site
-    } do
-      conn = get(conn, "/#{site.domain}/installation")
-
-      assert html_response(conn, 200) =~ "Determining installation type"
-    end
-  end
-
   describe "GET /:domain/settings/general" do
     setup [:create_user, :log_in, :create_site]
 
     setup_patch_env(:google, client_id: "some", api_url: "https://www.googleapis.com")
 
     test "shows settings form", %{conn: conn, site: site} do
-      conn = get(conn, "/#{site.domain}/settings/general")
+      conn = get(conn, Routes.site_path(conn, :settings_general, site.domain))
       resp = html_response(conn, 200)
 
-      assert resp =~ "Site timezone"
       assert resp =~ "Site domain"
+      assert resp =~ "Change domain"
+      assert resp =~ Routes.site_path(conn, :change_domain, site.domain)
+
+      assert resp =~ "Site timezone"
+
       assert resp =~ "Site installation"
     end
 
@@ -533,7 +524,7 @@ defmodule PlausibleWeb.SiteControllerTest do
                {"Custom properties", "/#{site.domain}/settings/properties"},
                {"Integrations", "/#{site.domain}/settings/integrations"},
                {"Imports & exports", "/#{site.domain}/settings/imports-exports"},
-               {"Shields", ""},
+               {"Shields", nil},
                {"IP addresses", "/#{site.domain}/settings/shields/ip_addresses"},
                {"Countries", "/#{site.domain}/settings/shields/countries"},
                {"Pages", "/#{site.domain}/settings/shields/pages"},
@@ -565,7 +556,7 @@ defmodule PlausibleWeb.SiteControllerTest do
                {"Custom properties", "/#{site.domain}/settings/properties"},
                {"Integrations", "/#{site.domain}/settings/integrations"},
                {"Imports & exports", "/#{site.domain}/settings/imports-exports"},
-               {"Shields", ""},
+               {"Shields", nil},
                {"IP addresses", "/#{site.domain}/settings/shields/ip_addresses"},
                {"Countries", "/#{site.domain}/settings/shields/countries"},
                {"Pages", "/#{site.domain}/settings/shields/pages"},
@@ -902,10 +893,9 @@ defmodule PlausibleWeb.SiteControllerTest do
       conn = get(conn, "/#{site.domain}/settings/imports-exports")
       resp = html_response(conn, 200)
 
-      assert text_of_attr(resp, ~s|a[href]|, "href") =~
-               "https://accounts.google.com/o/oauth2/"
+      assert element_exists?(resp, ~s|a[href^="https://accounts.google.com/o/oauth2/"]|)
 
-      assert resp =~ "Import data"
+      assert(resp =~ "Import data")
       assert resp =~ "There are no imports yet"
       assert resp =~ "Export data"
     end
@@ -927,8 +917,7 @@ defmodule PlausibleWeb.SiteControllerTest do
       conn = get(conn, "/#{site.domain}/settings/imports-exports")
       resp = html_response(conn, 200)
 
-      buttons = find(resp, ~s|a[data-method="delete"]|)
-      assert length(buttons) == 4
+      assert elem_count(resp, ~s|a[data-method="delete"]|) == 4
 
       assert resp =~ "Google Analytics (123456)"
       assert resp =~ "9.9k"
@@ -1616,7 +1605,7 @@ defmodule PlausibleWeb.SiteControllerTest do
     test "shows form for new shared link", %{conn: conn, site: site} do
       conn = get(conn, "/sites/#{site.domain}/shared-links/new")
 
-      assert html_response(conn, 200) =~ "New Shared Link"
+      assert html_response(conn, 200) =~ "New shared link"
     end
   end
 
@@ -1863,104 +1852,6 @@ defmodule PlausibleWeb.SiteControllerTest do
     end
   end
 
-  describe "domain change" do
-    setup [:create_user, :log_in, :create_site]
-
-    test "shows domain change in the settings form", %{conn: conn, site: site} do
-      conn = get(conn, Routes.site_path(conn, :settings_general, site.domain))
-      resp = html_response(conn, 200)
-
-      assert resp =~ "Site domain"
-      assert resp =~ "Change domain"
-      assert resp =~ Routes.site_path(conn, :change_domain, site.domain)
-    end
-
-    test "domain change form renders", %{conn: conn, site: site} do
-      conn = get(conn, Routes.site_path(conn, :change_domain, site.domain))
-      resp = html_response(conn, 200)
-      assert resp =~ Routes.site_path(conn, :change_domain_submit, site.domain)
-
-      assert text(resp) =~
-               "Once you change your domain, you must update Plausible Installation on your site within 72 hours"
-    end
-
-    test "domain change form submission when no change is made", %{conn: conn, site: site} do
-      conn =
-        put(conn, Routes.site_path(conn, :change_domain_submit, site.domain), %{
-          "site" => %{"domain" => site.domain}
-        })
-
-      resp = html_response(conn, 200)
-      assert resp =~ "New domain must be different than the current one"
-    end
-
-    test "domain change form submission to an existing domain", %{conn: conn, site: site} do
-      another_site = insert(:site)
-
-      conn =
-        put(conn, Routes.site_path(conn, :change_domain_submit, site.domain), %{
-          "site" => %{"domain" => another_site.domain}
-        })
-
-      resp = html_response(conn, 200)
-      assert resp =~ "This domain cannot be registered"
-
-      site = Repo.reload!(site)
-      assert site.domain != another_site.domain
-      assert is_nil(site.domain_changed_from)
-    end
-
-    test "domain change form submission to a domain in transition period", %{
-      conn: conn,
-      site: site
-    } do
-      another_site = insert(:site, domain_changed_from: "foo.example.com")
-
-      conn =
-        put(conn, Routes.site_path(conn, :change_domain_submit, site.domain), %{
-          "site" => %{"domain" => "foo.example.com"}
-        })
-
-      resp = html_response(conn, 200)
-      assert resp =~ "This domain cannot be registered"
-
-      site = Repo.reload!(site)
-      assert site.domain != another_site.domain
-      assert is_nil(site.domain_changed_from)
-    end
-
-    test "domain change successful form submission redirects to installation", %{
-      conn: conn,
-      site: site
-    } do
-      original_domain = site.domain
-      new_domain = "â-example.com"
-
-      conn =
-        put(conn, Routes.site_path(conn, :change_domain_submit, site.domain), %{
-          "site" => %{"domain" => new_domain}
-        })
-
-      assert redirected_to(conn) ==
-               Routes.site_path(conn, :installation, new_domain,
-                 flow: PlausibleWeb.Flows.domain_change()
-               )
-
-      site = Repo.reload!(site)
-      assert site.domain == new_domain
-      assert site.domain_changed_from == original_domain
-    end
-
-    test "change_domain redirects to v2 when scriptv2 flag is enabled", %{conn: conn, site: site} do
-      FunWithFlags.enable(:scriptv2, for_actor: site)
-
-      conn = get(conn, Routes.site_path(conn, :change_domain, site.domain))
-
-      assert redirected_to(conn) ==
-               Routes.site_path(conn, :change_domain_v2, site.domain)
-    end
-  end
-
   describe "reset stats" do
     setup [:create_user, :log_in, :create_site]
 
@@ -2050,6 +1941,7 @@ defmodule PlausibleWeb.SiteControllerTest do
         )
 
       html = html_response(conn, 200)
+
       assert text(html) =~ "This site's usage is over the limits of the team's subscription"
     end
 

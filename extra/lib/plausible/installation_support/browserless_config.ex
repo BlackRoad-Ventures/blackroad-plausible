@@ -4,16 +4,14 @@ defmodule Plausible.InstallationSupport.BrowserlessConfig do
   """
   use Plausible
 
-  def retry_browserless_request(_request, %{status: status}) do
-    case status do
-      # rate limit
-      429 -> {:delay, 1000}
-      # timeout
-      408 -> {:delay, 500}
-      # other errors
-      _ -> false
-    end
-  end
+  @retry_policy %{
+    # rate limit
+    429 => {:delay, 1000},
+    # even 400 are verified manually to sometimes succeed on retry
+    400 => {:delay, 500}
+  }
+
+  def retry_policy(), do: @retry_policy
 
   on_ee do
     def browserless_function_api_endpoint() do
