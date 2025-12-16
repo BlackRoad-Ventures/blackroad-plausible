@@ -274,7 +274,10 @@ defmodule PlausibleWeb.Plugins.API.Controllers.GoalsTest do
     test "creates a custom event goal", %{conn: conn, token: token, site: site} do
       url = Routes.plugins_api_goals_url(PlausibleWeb.Endpoint, :create)
 
-      payload = %{goal_type: "Goal.CustomEvent", goal: %{event_name: "Signup"}}
+      payload = %{
+        goal_type: "Goal.CustomEvent",
+        goal: %{event_name: "Signup"}
+      }
 
       assert_request_schema(payload, "Goal.CreateRequest.CustomEvent", spec())
 
@@ -302,7 +305,15 @@ defmodule PlausibleWeb.Plugins.API.Controllers.GoalsTest do
                  List.first(schema.goals).goal.id
                )
 
-      assert [%{event_name: "Signup"}] = Plausible.Goals.for_site(site)
+      assert [goal] = Plausible.Goals.for_site(site)
+
+      assert_matches %{
+                       id: ^any(:number),
+                       event_name: "Signup",
+                       display_name: "Signup",
+                       currency: nil,
+                       custom_props: ^strict_map(%{})
+                     } = goal
     end
 
     @tag :ee_only
