@@ -262,6 +262,9 @@ defmodule PlausibleWeb.Api.StatsController.SourcesTest do
       ])
 
       populate_stats(site, [
+        build(:imported_visitors),
+        build(:imported_visitors),
+        build(:imported_visitors),
         build(:imported_sources,
           source: "Google",
           visitors: 2
