@@ -17,6 +17,10 @@ defmodule PlausibleWeb.Live.Dashboard do
   end
 
   def mount(_params, %{"domain" => domain, "url" => url}, socket) do
+    if connected?(socket) do
+      Process.sleep(3000)
+    end
+
     user_prefs = get_connect_params(socket)["user_prefs"] || %{}
 
     # As domain is passed via session, the associated site has already passed
@@ -75,6 +79,7 @@ defmodule PlausibleWeb.Live.Dashboard do
         />
       </.portal_wrapper>
     </div>
+    <div phx-mounted={JS.remove_class("hidden")} class="hidden text-indigo-600">PEEKABOO</div>
     """
   end
 
