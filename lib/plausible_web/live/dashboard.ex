@@ -79,7 +79,7 @@ defmodule PlausibleWeb.Live.Dashboard do
         />
       </.portal_wrapper>
     </div>
-    <div phx-mounted={JS.remove_class("hidden")} class="hidden text-indigo-600">PEEKABOO</div>
+    <div id="deadview-test" phx-hook="DeadHook" class="hidden text-indigo-600">PEEKABOO</div>
     """
   end
 
